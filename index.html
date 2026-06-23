@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TCS ID Scanner - OCR Attendance</title>
+    <title>TCS ID Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -11,10 +11,10 @@
         .scan-frame::before {
             content: '';
             position: absolute;
-            inset: 12%;
-            border: 4px solid #22d3ee;
-            border-radius: 16px;
-            box-shadow: 0 0 0 9999px rgba(0,0,0,0.75);
+            inset: 10%;
+            border: 5px solid #22d3ee;
+            border-radius: 20px;
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.8);
             z-index: 10;
             pointer-events: none;
         }
@@ -37,13 +37,11 @@
 
         <!-- Camera -->
         <div class="bg-zinc-900 rounded-3xl p-4">
-            <div class="flex justify-between items-center mb-4">
-                <div class="flex items-center gap-2 font-medium">
+            <div class="flex justify-between mb-4">
+                <div class="flex items-center gap-2">
                     <span class="text-green-400">●</span> Live Camera
                 </div>
-                <button onclick="switchCamera()" class="px-5 py-2 bg-zinc-800 rounded-2xl text-sm flex items-center gap-1">
-                    <i class="fa-solid fa-camera-rotate"></i> Switch
-                </button>
+                <button onclick="switchCamera()" class="px-5 py-2 bg-zinc-800 rounded-2xl text-sm">Switch Camera</button>
             </div>
 
             <div class="scan-frame rounded-3xl overflow-hidden border-4 border-cyan-400 bg-black aspect-square relative">
@@ -52,30 +50,21 @@
             </div>
 
             <button onclick="captureAndExtract()" id="capture-btn"
-                    class="mt-5 w-full py-5 bg-white text-black rounded-3xl font-bold flex items-center justify-center gap-3">
-                <i class="fa-solid fa-camera"></i> CAPTURE & EXTRACT TEXT
+                    class="mt-5 w-full py-5 bg-white text-black rounded-3xl font-bold text-lg">
+                📸 CAPTURE & EXTRACT
             </button>
         </div>
 
-        <!-- Extracted -->
+        <!-- Extracted / Manual -->
         <div id="extracted-box" class="hidden bg-zinc-900 rounded-3xl p-6">
-            <div class="text-emerald-400 text-xs">EXTRACTED FROM ID CARD</div>
-            <div class="mt-4 space-y-3">
-                <div class="flex justify-between">
-                    <span class="text-zinc-400">Name</span>
-                    <span id="extracted-name" class="font-semibold text-right"></span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-zinc-400">Card No</span>
-                    <span id="extracted-id" class="font-mono font-semibold"></span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-zinc-400">Associate No</span>
-                    <span id="extracted-associate" class="font-mono"></span>
-                </div>
+            <div class="text-emerald-400 text-xs">EXTRACTED / MANUAL</div>
+            <div class="mt-4 space-y-4">
+                <input id="manual-name" placeholder="Name (PAWAN MAHESHWARI)" class="w-full bg-zinc-800 p-4 rounded-2xl">
+                <input id="manual-id" placeholder="Card No (702462)" class="w-full bg-zinc-800 p-4 rounded-2xl">
+                <input id="manual-assoc" placeholder="Associate No (2138058)" class="w-full bg-zinc-800 p-4 rounded-2xl">
             </div>
             <div class="flex gap-3 mt-6">
-                <button onclick="markAttendanceFromExtracted()" class="flex-1 py-4 bg-emerald-500 rounded-2xl font-semibold">MARK ATTENDANCE</button>
+                <button onclick="markManual()" class="flex-1 py-4 bg-emerald-500 rounded-2xl font-semibold">MARK ATTENDANCE</button>
                 <button onclick="cancelExtracted()" class="flex-1 py-4 bg-zinc-800 rounded-2xl">Cancel</button>
             </div>
         </div>
@@ -97,16 +86,11 @@
         let stream = null;
         let currentFacing = "environment";
         let records = [];
-        let extractedData = null;
 
         async function startCamera() {
-            try {
-                if (stream) stream.getTracks().forEach(t => t.stop());
-                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacing } });
-                document.getElementById('video').srcObject = stream;
-            } catch (e) {
-                alert("Camera permission needed");
-            }
+            if (stream) stream.getTracks().forEach(t => t.stop());
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacing } });
+            document.getElementById('video').srcObject = stream;
         }
 
         function switchCamera() {
@@ -119,59 +103,92 @@
             const canvas = document.getElementById('canvas');
             const ctx = canvas.getContext('2d');
 
-            canvas.width = video.videoWidth || 640;
-            canvas.height = video.videoHeight || 480;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            // Preprocessing
+            // Strong preprocessing
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const data = imageData.data;
             for (let i = 0; i < data.length; i += 4) {
                 const gray = data[i] * 0.3 + data[i+1] * 0.59 + data[i+2] * 0.11;
-                const boosted = Math.min(255, gray * 1.5);
-                data[i] = data[i+1] = data[i+2] = boosted;
+                data[i] = data[i+1] = data[i+2] = Math.min(255, gray * 1.6);
             }
             ctx.putImageData(imageData, 0, 0);
 
             const btn = document.getElementById('capture-btn');
             btn.disabled = true;
-            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> READING...`;
+            btn.textContent = "Reading...";
 
             try {
                 const { data: { text } } = await Tesseract.recognize(canvas, 'eng', {
-                    tessedit_pageseg_mode: 6,
-                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -.,/'
+                    tessedit_pageseg_mode: 6
                 });
 
                 console.log("OCR:", text);
 
-                let name = "Unknown";
-                let cardNo = "Unknown";
-                let associateNo = "Unknown";
+                let name = text.match(/PAWAN MAHESHWARI/i) ? "PAWAN MAHESHWARI" : (text.match(/[A-Z][A-Z\s]{8,40}/) || ["Unknown"])[0];
+                let cardNo = (text.match(/Card No\s*(\d+)/i) || text.match(/(\d{6,})/) || ["Unknown"])[1];
+                let assoc = (text.match(/Associate No\s*(\d+)/i) || ["Unknown"])[1];
 
-                // Tuned for your card
-                if (text.match(/PAWAN MAHESHWARI/i)) name = "PAWAN MAHESHWARI";
-                else {
-                    const nameMatch = text.match(/[A-Z][A-Z\s]{8,40}/);
-                    if (nameMatch) name = nameMatch[0].trim();
-                }
+                document.getElementById('manual-name').value = name;
+                document.getElementById('manual-id').value = cardNo;
+                document.getElementById('manual-assoc').value = assoc;
 
-                const cardMatch = text.match(/Card No\s*(\d+)/i) || text.match(/(\d{6,})/);
-                if (cardMatch) cardNo = cardMatch[1];
-
-                const assocMatch = text.match(/Associate No\s*(\d+)/i) || text.match(/(\d{7,})/);
-                if (assocMatch) associateNo = assocMatch[1];
-
-                extractedData = { userName: name, userId: cardNo, associateNo };
-
-                document.getElementById('extracted-name').textContent = name;
-                document.getElementById('extracted-id').textContent = cardNo;
-                document.getElementById('extracted-associate').textContent = associateNo;
                 document.getElementById('extracted-box').classList.remove('hidden');
 
-            } catch (err) {
-                alert("OCR failed. Try better lighting.");
-                console.error(err);
+            } catch (e) {
+                alert("OCR failed. Use manual fields below.");
+                document.getElementById('extracted-box').classList.remove('hidden');
             } finally {
                 btn.disabled = false;
-                btn.innerHTML
+                btn.textContent = "📸 CAPTURE & EXTRACT TEXT";
+            }
+        }
+
+        function markManual() {
+            const name = document.getElementById('manual-name').value.trim();
+            const id = document.getElementById('manual-id').value.trim();
+            const assoc = document.getElementById('manual-assoc').value.trim();
+
+            if (!name) return alert("Enter name");
+
+            records.unshift({ userName: name, userId: id, associateNo: assoc, time: new Date().toLocaleTimeString() });
+            updateStats();
+            document.getElementById('extracted-box').classList.add('hidden');
+            alert(`✅ Marked: ${name}`);
+        }
+
+        function cancelExtracted() {
+            document.getElementById('extracted-box').classList.add('hidden');
+        }
+
+        function updateStats() {
+            document.getElementById('stat-today').textContent = records.length;
+            document.getElementById('stat-total').textContent = records.length;
+        }
+
+        function exportToCSV() {
+            if (!records.length) return alert("No records");
+            let csv = "Name,Card No,Associate No,Time\n";
+            records.forEach(r => csv += `"${r.userName}","${r.userId}","${r.associateNo || ''}","${r.time}"\n`);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
+            a.download = 'tcs_attendance.csv';
+            a.click();
+        }
+
+        function clearData() {
+            if (confirm("Clear all?")) {
+                records = [];
+                updateStats();
+            }
+        }
+
+        window.onload = () => {
+            startCamera();
+            updateStats();
+        };
+    </script>
+</body>
+</html>
