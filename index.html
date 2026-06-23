@@ -4,21 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TCS Cohort Attendance Scanner | Perpetually Adaptive</title>
-    <meta name="description" content="Client-side QR ID Card Scanner for marking attendance in cohort programs. Fully local storage. Dark theme inspired by TCS.">
+    <meta name="description" content="Client-side QR ID Card Scanner">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@500;600&display=swap');
-        
         body { font-family: 'Inter', system_ui, sans-serif; }
         .font-display { font-family: 'Space Grotesk', 'Inter', sans-serif; font-weight: 600; letter-spacing: -0.025em; }
         .tcs-dark { background-color: #0a0a0a; }
-        .section-header { font-size: 0.75rem; letter-spacing: 2px; font-weight: 600; color: #64748b; }
-        .attendance-card { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
-        .attendance-card:hover { transform: translateY(-2px); }
-        .modal { animation: modalPop 0.2s ease-out forwards; }
-        @keyframes modalPop { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
         .scan-frame { position: relative; }
         .scan-frame::before {
             content: '';
@@ -34,19 +28,18 @@
 </head>
 <body class="bg-zinc-950 text-zinc-200 tcs-dark min-h-screen">
 
-    <!-- Top Nav -->
-    <nav class="sticky top-0 z-50 bg-zinc-950/95 backdrop-blur-lg border-b border-zinc-800">
+    <!-- Header -->
+    <nav class="sticky top-0 z-50 bg-zinc-950 border-b border-zinc-800">
         <div class="max-w-7xl mx-auto px-4">
             <div class="flex items-center justify-between h-16">
-                <div class="flex items-center gap-x-3">
-                    <span class="text-3xl font-black tracking-tighter">tcs</span>
-                    <div>
-                        <div class="text-[10px] font-bold tracking-widest text-zinc-400">TATA CONSULTANCY SERVICES</div>
-                        <div class="text-blue-400 text-xs">COHORT PROGRAMS</div>
+                <div class="flex items-center gap-3">
+                    <span class="text-3xl font-black">tcs</span>
+                    <div class="text-xs">
+                        <div class="font-bold tracking-widest text-zinc-400">TATA CONSULTANCY SERVICES</div>
+                        <div class="text-blue-400">COHORT PROGRAMS</div>
                     </div>
                 </div>
-                <div class="flex items-center gap-x-3">
-                    <div onclick="editCohortName()" class="text-sm cursor-pointer">AI Transformation • Batch 06</div>
+                <div class="flex gap-4">
                     <button onclick="exportToCSV()" class="p-2"><i class="fa-solid fa-download"></i></button>
                     <button onclick="showClearConfirm()" class="p-2 text-red-400"><i class="fa-solid fa-trash"></i></button>
                 </div>
@@ -54,134 +47,139 @@
         </div>
     </nav>
 
-    <!-- Hero -->
-    <div class="max-w-7xl mx-auto px-4 pt-8">
-        <div class="bg-zinc-900 rounded-3xl p-8 border border-zinc-800">
-            <div class="text-xs tracking-widest text-zinc-400">WHAT WE TRACK</div>
-            <h1 class="text-5xl font-bold leading-tight mt-2">Turning ID scans into <span class="text-blue-400">confirmed presence</span></h1>
-            <p class="mt-4 text-zinc-400">Perpetually Adaptive Enterprise attendance system for cohort programs.</p>
+    <!-- Hero / CTA -->
+    <div class="max-w-7xl mx-auto px-4 pt-8 pb-6">
+        <div class="bg-zinc-900 rounded-3xl p-8 border border-zinc-700">
+            <h1 class="text-5xl font-bold leading-tight">Turning ID scans into confirmed presence</h1>
+            <p class="mt-3 text-zinc-400">Perpetually Adaptive attendance for cohort programs.</p>
             
-            <div class="mt-8 space-y-3">
-                <button onclick="togglePersistentScanner()" id="main-scan-btn" class="w-full py-4 bg-white text-black rounded-2xl font-semibold flex items-center justify-center gap-2">
+            <div class="mt-8 flex flex-col gap-3">
+                <button onclick="togglePersistentScanner()" id="main-scan-btn" class="w-full py-5 bg-white text-black rounded-2xl font-semibold flex items-center justify-center gap-3 text-lg">
                     <i class="fa-solid fa-camera"></i> <span id="main-scan-btn-text">Start Scanner</span>
                 </button>
-                <button onclick="openManualEntry()" class="w-full py-4 bg-zinc-800 rounded-2xl font-medium">Manual Entry</button>
+                <button onclick="openManualEntry()" class="w-full py-5 bg-zinc-800 rounded-2xl">Manual Entry</button>
             </div>
         </div>
     </div>
 
-    <!-- Stats -->
-    <div class="max-w-7xl mx-auto px-4 mt-8 grid grid-cols-2 gap-3">
-        <div class="bg-zinc-900 p-5 rounded-3xl">
-            <div class="text-emerald-400 text-xs">TODAY</div>
-            <div id="stat-today" class="text-5xl font-bold">0</div>
-        </div>
-        <div class="bg-zinc-900 p-5 rounded-3xl">
-            <div class="text-blue-400 text-xs">TOTAL MARKED</div>
-            <div id="stat-total" class="text-5xl font-bold">0</div>
-        </div>
-    </div>
-
-    <!-- Persistent Live Scanner -->
-    <div class="max-w-7xl mx-auto px-4 mt-8">
-        <div class="bg-zinc-900 rounded-3xl overflow-hidden border border-zinc-700">
-            <div class="p-4 bg-zinc-950 flex items-center justify-between border-b border-zinc-800">
+    <!-- Live Scanner -->
+    <div class="max-w-7xl mx-auto px-4">
+        <div class="bg-zinc-900 rounded-3xl border border-zinc-700 overflow-hidden">
+            <div class="px-6 py-4 bg-zinc-950 flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                    <div class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                    <span class="font-medium">Live Scanner • Ready to Flash</span>
+                    <div class="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse"></div>
+                    <span id="scanner-status" class="font-medium">Live Scanner Ready</span>
                 </div>
-                <button onclick="togglePersistentScanner()" id="scanner-toggle-btn" class="text-xs px-4 py-1 bg-zinc-800 rounded-xl">Pause</button>
+                <div class="flex gap-2">
+                    <button onclick="switchCamera()" id="camera-switch-btn" class="px-4 py-1.5 bg-zinc-800 rounded-2xl text-sm flex items-center gap-1">
+                        <i class="fa-solid fa-camera-rotate"></i> Switch
+                    </button>
+                    <button onclick="togglePersistentScanner()" id="pause-btn" class="px-4 py-1.5 bg-zinc-800 rounded-2xl text-sm">Pause</button>
+                </div>
             </div>
+            
             <div class="p-6">
-                <div id="persistent-scanner-wrapper" class="hidden mx-auto" style="max-width: 380px;">
-                    <div class="scan-frame rounded-3xl overflow-hidden border-4 border-zinc-600 bg-black" style="aspect-ratio: 1;">
-                        <div id="persistent-qr-reader" class="w-full h-full"></div>
+                <div id="scanner-wrapper" class="hidden">
+                    <div class="scan-frame mx-auto rounded-3xl overflow-hidden bg-black border-4 border-blue-600" style="aspect-ratio: 1.05 / 1; max-width: 380px;">
+                        <div id="qr-reader" class="w-full h-full"></div>
                     </div>
                 </div>
-                <div id="scanner-placeholder" class="text-center py-12">
-                    <i class="fa-solid fa-camera text-6xl text-zinc-600 mb-4"></i>
-                    <p>Tap Start Scanner to begin</p>
+                <div id="scanner-placeholder" class="text-center py-20">
+                    <i class="fa-solid fa-camera text-7xl text-zinc-600 mb-6"></i>
+                    <p class="text-xl font-medium">Tap Start Scanner</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Attendance List and Modals (full implementation in the file) -->
-    <!-- Copy the complete version from artifacts/index.html for all JS, records list, confirm modal, etc. -->
+    <!-- Stats & Records -->
+    <div class="max-w-7xl mx-auto px-4 mt-8 text-center">
+        <div class="grid grid-cols-2 gap-4">
+            <div class="bg-zinc-900 p-6 rounded-3xl">
+                <div class="text-emerald-400 text-xs tracking-widest">TODAY</div>
+                <div id="stat-today" class="text-6xl font-bold mt-1">0</div>
+            </div>
+            <div class="bg-zinc-900 p-6 rounded-3xl">
+                <div class="text-blue-400 text-xs tracking-widest">TOTAL</div>
+                <div id="stat-total" class="text-6xl font-bold mt-1">0</div>
+            </div>
+        </div>
+    </div>
 
     <script>
-        // Global vars
         let attendanceRecords = [];
-        let currentFilter = 'today';
-        let lastScannedData = null;
-        let cohortName = "AI Transformation • Batch 06";
-        let isPersistentMode = false;
+        let currentCameraFacing = "environment"; // default rear
         let persistentHtml5QrCode = null;
+        let isScanning = false;
 
         function togglePersistentScanner() {
-            const wrapper = document.getElementById('persistent-scanner-wrapper');
+            const wrapper = document.getElementById('scanner-wrapper');
             const placeholder = document.getElementById('scanner-placeholder');
             const mainText = document.getElementById('main-scan-btn-text');
             
-            if (!isPersistentMode) {
-                isPersistentMode = true;
+            if (!isScanning) {
+                isScanning = true;
                 wrapper.classList.remove('hidden');
                 placeholder.classList.add('hidden');
                 mainText.textContent = 'Scanner Active';
-                initPersistentQRScanner();
+                initScanner();
             } else {
-                // Toggle pause
-                if (persistentHtml5QrCode) {
-                    persistentHtml5QrCode.stop().then(() => {
-                        isPersistentMode = false;
-                        mainText.textContent = 'Start Scanner';
-                    });
-                }
+                if (persistentHtml5QrCode) persistentHtml5QrCode.stop();
+                isScanning = false;
+                mainText.textContent = 'Start Scanner';
             }
         }
 
-        function initPersistentQRScanner() {
-            const container = document.getElementById('persistent-qr-reader');
+        function initScanner() {
+            const container = document.getElementById('qr-reader');
             container.innerHTML = '';
-            persistentHtml5QrCode = new Html5Qrcode("persistent-qr-reader");
+            
+            persistentHtml5QrCode = new Html5Qrcode("qr-reader");
             
             persistentHtml5QrCode.start(
-                { facingMode: "environment" },
-                { fps: 12, qrbox: { width: 250, height: 250 } },
+                { facingMode: currentCameraFacing },
+                { fps: 15, qrbox: { width: 260, height: 260 } },
                 (decodedText) => {
                     const parsed = parseQRData(decodedText);
-                    lastScannedData = parsed;
-                    showConfirmModal(parsed);
+                    if (confirm(`Mark ${parsed.userName} (${parsed.userId})?`)) {
+                        addAttendance(parsed.userId, parsed.userName);
+                    }
                 },
-                () => {} // silent error
-            ).catch(console.error);
+                () => {}
+            ).catch(err => console.error(err));
+        }
+
+        function switchCamera() {
+            if (!persistentHtml5QrCode) return;
+            
+            currentCameraFacing = currentCameraFacing === "environment" ? "user" : "environment";
+            
+            persistentHtml5QrCode.stop().then(() => {
+                initScanner();
+                showToast(`Switched to ${currentCameraFacing === "user" ? "Front" : "Rear"} Camera`);
+            });
         }
 
         function parseQRData(raw) {
             try {
                 const p = JSON.parse(raw);
-                return { userId: p.userId || p.id || raw, userName: p.userName || "User" };
+                return { userId: p.userId || raw, userName: p.userName || "User" };
             } catch(e) {}
             if (raw.includes('|')) {
-                const [id, name] = raw.split('|');
-                return { userId: id.trim(), userName: (name || "User").trim() };
+                const parts = raw.split('|');
+                return { userId: parts[0].trim(), userName: (parts[1] || "User").trim() };
             }
-            return { userId: raw, userName: "Scanned User" };
-        }
-
-        function showConfirmModal(data) {
-            if (confirm(`Mark attendance for ${data.userName} (${data.userId})?`)) {
-                addAttendance(data.userId, data.userName);
-            }
+            return { userId: raw.trim(), userName: "Scanned User" };
         }
 
         function addAttendance(userId, userName) {
-            const now = new Date();
             attendanceRecords.unshift({
-                userId, userName, timestamp: now.toISOString(), date: now.toISOString().split('T')[0]
+                userId,
+                userName,
+                timestamp: new Date().toISOString()
             });
             updateStats();
-            console.log('Attendance marked for', userName);
+            showToast(`Marked: ${userName}`);
         }
 
         function updateStats() {
@@ -190,37 +188,40 @@
         }
 
         function openManualEntry() {
-            const id = prompt("User ID");
-            const name = prompt("User Name");
+            const id = prompt("Enter User ID");
+            const name = prompt("Enter User Name");
             if (id && name) addAttendance(id, name);
         }
 
-        function editCohortName() {
-            cohortName = prompt("New cohort name", cohortName) || cohortName;
-        }
-
         function exportToCSV() {
-            if (attendanceRecords.length === 0) return alert("No records");
-            let csv = "ID,Name,Time\n";
-            attendanceRecords.forEach(r => csv += `"${r.userId}","${r.userName}","${r.timestamp}"\n`);
+            if (!attendanceRecords.length) return alert("No records");
+            let csv = "UserID,Name,Time\n";
+            attendanceRecords.forEach(r => csv += `${r.userId},${r.userName},${r.timestamp}\n`);
             const blob = new Blob([csv], {type: 'text/csv'});
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'attendance.csv';
-            a.click();
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'attendance.csv';
+            link.click();
         }
 
         function showClearConfirm() {
-            if (confirm("Clear all records?")) {
+            if (confirm("Clear all attendance?")) {
                 attendanceRecords = [];
                 updateStats();
             }
         }
 
-        // Init
+        function showToast(msg) {
+            const toast = document.createElement('div');
+            toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#10b981;color:white;padding:12px 24px;border-radius:9999px;font-size:14px;z-index:1000;';
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2200);
+        }
+
         window.onload = () => {
             updateStats();
-            console.log('✅ TCS Scanner loaded - Start Scanner button ready');
+            console.log('✅ Wall-mounted scanner ready. Front/rear camera supported.');
         };
     </script>
 </body>
