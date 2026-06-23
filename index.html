@@ -33,20 +33,22 @@
         </div>
     </nav>
 
-    <div class="max-w-md mx-auto p-4">
+    <div class="max-w-md mx-auto p-4 space-y-6">
 
-        <!-- Live Scanner -->
-        <div class="bg-zinc-900 rounded-3xl p-4 mb-6">
+        <!-- Live Camera -->
+        <div class="bg-zinc-900 rounded-3xl p-4">
             <div class="flex justify-between items-center mb-4">
                 <div class="flex items-center gap-2">
-                    <span class="text-green-400">●</span> Live Scanner
+                    <span class="text-green-400">●</span> Live Camera
                 </div>
-                <button onclick="switchCamera()" class="px-5 py-2 bg-zinc-800 rounded-2xl text-sm">Switch Camera</button>
+                <button onclick="switchCamera()" class="px-5 py-2 bg-zinc-800 rounded-2xl text-sm">Switch</button>
             </div>
+
             <div class="scan-frame rounded-3xl overflow-hidden border-4 border-cyan-400 bg-black aspect-square relative">
                 <video id="video" class="w-full h-full object-cover" autoplay playsinline></video>
                 <canvas id="canvas" class="hidden"></canvas>
             </div>
+
             <button onclick="captureAndExtract()" id="capture-btn"
                     class="mt-5 w-full py-6 bg-white text-black rounded-3xl font-bold text-xl">
                 📸 CAPTURE ID CARD
@@ -54,23 +56,14 @@
         </div>
 
         <!-- Extracted -->
-        <div id="extracted-box" class="hidden bg-zinc-900 rounded-3xl p-6 mb-6">
-            <div class="text-emerald-400 text-xs mb-3">DETECTED FROM CARD</div>
-            <div class="space-y-4">
-                <div>
-                    <div class="text-zinc-400 text-xs">NAME</div>
-                    <div id="extracted-name" class="font-semibold text-xl"></div>
-                </div>
-                <div>
-                    <div class="text-zinc-400 text-xs">CARD NO</div>
-                    <div id="extracted-id" class="font-mono text-xl"></div>
-                </div>
-                <div>
-                    <div class="text-zinc-400 text-xs">ASSOCIATE NO</div>
-                    <div id="extracted-assoc" class="font-mono text-xl"></div>
-                </div>
+        <div id="extracted-box" class="hidden bg-zinc-900 rounded-3xl p-6">
+            <div class="text-emerald-400 text-xs">EXTRACTED</div>
+            <div class="mt-4 space-y-4">
+                <input id="name-input" class="w-full bg-zinc-800 p-4 rounded-2xl text-lg" placeholder="Name">
+                <input id="id-input" class="w-full bg-zinc-800 p-4 rounded-2xl text-lg" placeholder="Card No">
+                <input id="assoc-input" class="w-full bg-zinc-800 p-4 rounded-2xl text-lg" placeholder="Associate No">
             </div>
-            <button onclick="markAttendanceFromExtracted()" class="mt-6 w-full py-5 bg-emerald-500 rounded-3xl font-bold text-lg">✅ MARK ATTENDANCE</button>
+            <button onclick="markAttendance()" class="mt-6 w-full py-5 bg-emerald-500 rounded-3xl font-bold text-lg">✅ MARK ATTENDANCE</button>
         </div>
 
         <!-- Stats -->
@@ -90,7 +83,6 @@
         let stream = null;
         let currentFacing = "environment";
         let records = [];
-        let extractedData = null;
 
         async function startCamera() {
             if (stream) stream.getTracks().forEach(t => t.stop());
@@ -107,58 +99,70 @@
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
             const ctx = canvas.getContext('2d');
-            
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            // Strong preprocessing
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imageData.data;
-            for (let i = 0; i < data.length; i += 4) {
-                const gray = data[i] * 0.3 + data[i+1] * 0.59 + data[i+2] * 0.11;
-                data[i] = data[i+1] = data[i+2] = Math.min(255, gray * 1.8); // high contrast
-            }
-            ctx.putImageData(imageData, 0, 0);
+            // Crop to the cyan frame (inset: 10%)
+            const cropX = video.videoWidth * 0.1;
+            const cropY = video.videoHeight * 0.1;
+            const cropWidth = video.videoWidth * 0.8;
+            const cropHeight = video.videoHeight * 0.8;
+
+            canvas.width = cropWidth;
+            canvas.height = cropHeight;
+            ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
 
             const btn = document.getElementById('capture-btn');
             btn.disabled = true;
-            btn.textContent = "READING CARD...";
+            btn.textContent = "READING (KEEP STEADY)...";
 
             try {
-                const { data: { text } } = await Tesseract.recognize(canvas, 'eng', {
-                    tessedit_pageseg_mode: 6,
+                const { data: { text } } = await Tesseract.recognize(canvas, 'eng', { 
+                    tessedit_pageseg_mode: 11 
                 });
 
-                let name = text.match(/PAWAN MAHESHWARI/i) ? "PAWAN MAHESHWARI" : (text.match(/[A-Z][A-Z\s]{10,40}/) || ["Unknown"])[0];
-                let cardNo = (text.match(/Card No\s*(\d+)/i) || text.match(/(\d{6,})/) || ["Unknown"])[1];
-                let assoc = (text.match(/Associate No\s*(\d+)/i) || text.match(/(\d{7,})/) || ["Unknown"])[1];
+                console.log("Raw OCR:", text);
 
-                extractedData = { userName: name.trim(), userId: cardNo, associateNo: assoc };
+                let nameMatch = text.match(/[A-Z][A-Z\s]{8,40}/); 
+                let name = nameMatch ? nameMatch[0].trim() : "";
 
-                document.getElementById('extracted-name').textContent = extractedData.userName;
-                document.getElementById('extracted-id').textContent = extractedData.userId;
-                document.getElementById('extracted-assoc').textContent = extractedData.associateNo;
+                let cardMatch = text.match(/(?:Card|Cerd)[^\d]*(\d{5,})/i) || text.match(/(\d{6,})/);
+                let cardNo = cardMatch ? cardMatch[1] : "";
+
+                let assocMatch = text.match(/(?:Associate|Assoc)[^\d]*(\d{5,})/i);
+                let assoc = assocMatch ? assocMatch[1] : "";
+
+                document.getElementById('name-input').value = name;
+                document.getElementById('id-input').value = cardNo;
+                document.getElementById('assoc-input').value = assoc;
 
                 document.getElementById('extracted-box').classList.remove('hidden');
 
             } catch (e) {
-                alert("OCR failed. Try better lighting or manual entry.");
+                console.error(e);
+                alert("OCR failed. Fill manually.");
+                document.getElementById('extracted-box').classList.remove('hidden');
             } finally {
                 btn.disabled = false;
                 btn.textContent = "📸 CAPTURE ID CARD";
             }
         }
 
-        function markAttendanceFromExtracted() {
-            if (!extractedData) return;
+        function markAttendance() {
+            const name = document.getElementById('name-input').value.trim();
+            const id = document.getElementById('id-input').value.trim();
+            const assoc = document.getElementById('assoc-input').value.trim();
+
+            if (!name) return alert("Enter name");
+
             records.unshift({
-                ...extractedData,
+                userName: name,
+                userId: id || "Unknown",
+                associateNo: assoc,
                 time: new Date().toLocaleTimeString()
             });
+
             updateStats();
             document.getElementById('extracted-box').classList.add('hidden');
-            alert(`✅ Marked: ${extractedData.userName}`);
+            alert(`✅ Marked: ${name}`);
         }
 
         function updateStats() {
@@ -169,7 +173,7 @@
         function exportToCSV() {
             if (!records.length) return alert("No records");
             let csv = "Name,Card No,Associate No,Time\n";
-            records.forEach(r => csv += `"${r.userName}","${r.userId}","${r.associateNo}","${r.time}"\n`);
+            records.forEach(r => csv += `"${r.userName}","${r.userId}","${r.associateNo || ''}","${r.time}"\n`);
             const a = document.createElement('a');
             a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
             a.download = 'cohort_attendance.csv';
@@ -177,7 +181,7 @@
         }
 
         function clearData() {
-            if (confirm("Clear all records?")) {
+            if (confirm("Clear all?")) {
                 records = [];
                 updateStats();
             }
