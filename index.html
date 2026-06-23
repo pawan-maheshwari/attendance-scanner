@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TCS Cohort Attendance Scanner</title>
+    <title>TCS ID Scanner - OCR Attendance</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
-        body { font-family: system-ui, sans-serif; }
+        .scan-frame { position: relative; }
         .scan-frame::before {
             content: '';
             position: absolute;
-            inset: 15%;
-            border: 3px solid #22d3ee;
-            border-radius: 12px;
-            box-shadow: 0 0 0 9999px rgba(0,0,0,0.7);
+            inset: 12%;
+            border: 4px solid #22d3ee;
+            border-radius: 16px;
+            box-shadow: 0 0 0 9999px rgba(0,0,0,0.75);
             z-index: 10;
             pointer-events: none;
         }
@@ -23,168 +23,188 @@
 </head>
 <body class="bg-zinc-950 text-white min-h-screen">
 
-    <nav class="sticky top-0 bg-zinc-900 border-b border-zinc-800 p-4 flex items-center justify-between">
+    <nav class="sticky top-0 bg-zinc-900 border-b border-zinc-700 p-4 flex justify-between items-center">
         <div>
             <span class="text-3xl font-black">tcs</span>
-            <span class="ml-2 text-blue-400 text-sm">COHORT PROGRAMS</span>
+            <span class="ml-2 text-blue-400">COHORT PROGRAMS</span>
         </div>
         <div class="flex gap-4">
-            <button onclick="exportToCSV()" class="text-lg"><i class="fa-solid fa-download"></i></button>
-            <button onclick="clearData()" class="text-red-400 text-lg"><i class="fa-solid fa-trash"></i></button>
+            <button onclick="exportToCSV()" class="text-xl"><i class="fa-solid fa-download"></i></button>
+            <button onclick="clearData()" class="text-red-400 text-xl"><i class="fa-solid fa-trash"></i></button>
         </div>
     </nav>
 
-    <div class="max-w-md mx-auto p-4">
-        <!-- CTA -->
-        <div class="bg-zinc-900 rounded-3xl p-8 mb-6">
-            <button onclick="toggleScanner()" id="start-btn" class="w-full py-5 bg-white text-black rounded-2xl font-bold text-xl flex items-center justify-center gap-3">
-                <i class="fa-solid fa-camera"></i> START SCANNER
-            </button>
-        </div>
+    <div class="max-w-md mx-auto p-4 space-y-6">
 
-        <!-- Live Scanner -->
-        <div class="bg-zinc-900 rounded-3xl p-4 mb-6">
+        <!-- Camera View -->
+        <div class="bg-zinc-900 rounded-3xl p-4">
             <div class="flex justify-between items-center mb-4 px-2">
                 <div class="flex items-center gap-2">
-                    <div class="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-                    <span class="font-medium">Live Scanner</span>
+                    <span class="text-green-400">●</span>
+                    <span class="font-medium">Live Camera</span>
                 </div>
                 <div class="flex gap-2">
-                    <button onclick="switchCamera()" class="px-5 py-2 bg-zinc-800 rounded-2xl text-sm flex items-center gap-1">
+                    <button onclick="switchCamera()" class="px-4 py-2 bg-zinc-800 rounded-2xl text-sm flex items-center gap-1">
                         <i class="fa-solid fa-camera-rotate"></i> Switch
                     </button>
-                    <button onclick="toggleScanner()" class="px-5 py-2 bg-zinc-800 rounded-2xl text-sm">Pause</button>
                 </div>
             </div>
-            
-            <div id="scanner-container" class="hidden relative rounded-2xl overflow-hidden border-4 border-cyan-400 bg-black" style="aspect-ratio: 1;">
-                <div id="qr-reader" class="w-full h-full"></div>
+
+            <div class="scan-frame rounded-3xl overflow-hidden bg-black border-4 border-cyan-400 aspect-square">
+                <video id="video" class="w-full h-full object-cover" autoplay playsinline></video>
+                <canvas id="canvas" class="hidden"></canvas>
             </div>
-            
-            <div id="placeholder" class="text-center py-16">
-                <i class="fa-solid fa-camera text-7xl text-zinc-600 mb-4"></i>
-                <p class="text-lg">Ready — Flash ID Card</p>
+
+            <div class="mt-4">
+                <button onclick="captureAndExtract()" id="capture-btn"
+                        class="w-full py-5 bg-white text-black rounded-3xl font-bold text-xl flex items-center justify-center gap-3">
+                    <i class="fa-solid fa-camera"></i> CAPTURE & EXTRACT TEXT
+                </button>
+            </div>
+        </div>
+
+        <!-- Extracted Info -->
+        <div id="extracted-box" class="hidden bg-zinc-900 rounded-3xl p-6">
+            <div class="text-emerald-400 text-xs mb-1">EXTRACTED FROM ID CARD</div>
+            <div class="space-y-2 text-lg">
+                <div><span class="text-zinc-400">Name:</span> <span id="extracted-name" class="font-semibold"></span></div>
+                <div><span class="text-zinc-400">Card No:</span> <span id="extracted-id" class="font-mono font-semibold"></span></div>
+            </div>
+            <div class="flex gap-3 mt-4">
+                <button onclick="markAttendanceFromExtracted()" class="flex-1 py-4 bg-emerald-500 rounded-2xl font-semibold">MARK ATTENDANCE</button>
+                <button onclick="cancelExtracted()" class="flex-1 py-4 bg-zinc-800 rounded-2xl">Cancel</button>
             </div>
         </div>
 
         <!-- Stats -->
         <div class="grid grid-cols-2 gap-4">
             <div class="bg-zinc-900 rounded-3xl p-6 text-center">
-                <div class="text-emerald-400 text-xs">TODAY</div>
+                <div class="text-xs text-emerald-400">TODAY</div>
                 <div id="stat-today" class="text-6xl font-bold">0</div>
             </div>
             <div class="bg-zinc-900 rounded-3xl p-6 text-center">
-                <div class="text-blue-400 text-xs">TOTAL</div>
+                <div class="text-xs text-blue-400">TOTAL</div>
                 <div id="stat-total" class="text-6xl font-bold">0</div>
             </div>
         </div>
     </div>
 
     <script>
-        let scanner = null;
-        let currentFacingMode = "environment";
-        let attendanceRecords = [];
+        let stream = null;
+        let currentFacing = "environment";
+        let records = [];
+        let extractedData = null;
 
-        function toggleScanner() {
-            const container = document.getElementById('scanner-container');
-            const placeholder = document.getElementById('placeholder');
-            
-            if (scanner) {
-                scanner.stop();
-                scanner = null;
-                container.classList.add('hidden');
-                placeholder.classList.remove('hidden');
-                document.getElementById('start-btn').textContent = 'START SCANNER';
-            } else {
-                container.classList.remove('hidden');
-                placeholder.classList.add('hidden');
-                startScanner();
+        async function startCamera() {
+            try {
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: currentFacing }
+                });
+                document.getElementById('video').srcObject = stream;
+            } catch (err) {
+                alert("Camera error: " + err.message);
             }
-        }
-
-        function startScanner() {
-            const readerDiv = document.getElementById('qr-reader');
-            readerDiv.innerHTML = '';
-            
-            scanner = new Html5Qrcode("qr-reader");
-            
-            scanner.start(
-                { facingMode: currentFacingMode },
-                {
-                    fps: 20,
-                    qrbox: { width: 320, height: 320 },
-                    aspectRatio: 1.0
-                },
-                (decodedText) => {
-                    const data = parseIdData(decodedText);
-                    if (data.userName && data.userId) {
-                        if (confirm(`Mark attendance for ${data.userName}?`)) {
-                            markAttendance(data.userId, data.userName);
-                        }
-                    }
-                },
-                (error) => {} // silent
-            ).catch(err => {
-                alert("Camera error: " + err);
-            });
         }
 
         function switchCamera() {
-            if (!scanner) return;
-            currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
-            scanner.stop().then(() => startScanner());
+            currentFacing = currentFacing === "environment" ? "user" : "environment";
+            startCamera();
         }
 
-        function parseIdData(raw) {
+        async function captureAndExtract() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const btn = document.getElementById('capture-btn');
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> READING ID CARD...`;
+            btn.disabled = true;
+
             try {
-                const json = JSON.parse(raw);
-                return { userId: json.userId || json.id || raw, userName: json.userName || "User" };
-            } catch(e) {}
-            if (raw.includes('|')) {
-                const [id, name] = raw.split('|');
-                return { userId: id.trim(), userName: name ? name.trim() : "User" };
+                const { data: { text } } = await Tesseract.recognize(
+                    canvas,
+                    'eng',
+                    { logger: m => console.log(m) }
+                );
+
+                console.log("OCR Result:", text);
+
+                // Parse TCS ID card text
+                const nameMatch = text.match(/([A-Z][A-Z\s]+MAHESHWARI)/i) || 
+                                 text.match(/([A-Z][A-Z\s]+)/);
+                const cardMatch = text.match(/Card No\s*(\d+)/i) || 
+                                 text.match(/(\d{6,})/);
+
+                const name = nameMatch ? nameMatch[1].trim() : "Unknown";
+                const cardNo = cardMatch ? cardMatch[1] : "Unknown";
+
+                extractedData = { userName: name, userId: cardNo };
+
+                // Show extracted info
+                document.getElementById('extracted-name').textContent = name;
+                document.getElementById('extracted-id').textContent = cardNo;
+                document.getElementById('extracted-box').classList.remove('hidden');
+
+            } catch (err) {
+                alert("OCR failed. Please try again with better lighting.");
+                console.error(err);
+            } finally {
+                btn.innerHTML = `<i class="fa-solid fa-camera"></i> CAPTURE & EXTRACT TEXT`;
+                btn.disabled = false;
             }
-            return { userId: raw, userName: "ID Card" };
         }
 
-        function markAttendance(userId, userName) {
-            attendanceRecords.unshift({
-                userId, userName, time: new Date().toLocaleTimeString()
+        function markAttendanceFromExtracted() {
+            if (!extractedData) return;
+            records.unshift({
+                ...extractedData,
+                time: new Date().toLocaleTimeString()
             });
             updateStats();
-            alert(`✅ Attendance marked for ${userName}`);
+            document.getElementById('extracted-box').classList.add('hidden');
+            alert(`✅ Attendance marked for ${extractedData.userName}`);
+            extractedData = null;
+        }
+
+        function cancelExtracted() {
+            document.getElementById('extracted-box').classList.add('hidden');
+            extractedData = null;
         }
 
         function updateStats() {
-            document.getElementById('stat-today').textContent = attendanceRecords.length;
-            document.getElementById('stat-total').textContent = attendanceRecords.length;
-        }
-
-        function openManualEntry() {
-            const id = prompt("User ID");
-            const name = prompt("Full Name");
-            if (id && name) markAttendance(id, name);
+            document.getElementById('stat-today').textContent = records.length;
+            document.getElementById('stat-total').textContent = records.length;
         }
 
         function exportToCSV() {
-            if (!attendanceRecords.length) return alert("No records");
-            let csv = "User ID,Name,Time\n";
-            attendanceRecords.forEach(r => csv += `${r.userId},${r.userName},${r.time}\n`);
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
-            link.download = 'attendance.csv';
-            link.click();
+            if (!records.length) return alert("No records yet");
+            let csv = "Name,Card No,Time\n";
+            records.forEach(r => csv += `"${r.userName}","${r.userId}","${r.time}"\n`);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([csv], {type: "text/csv"}));
+            a.download = "tcs_attendance.csv";
+            a.click();
         }
 
         function clearData() {
-            if (confirm("Clear all records?")) {
-                attendanceRecords = [];
+            if (confirm("Clear all attendance records?")) {
+                records = [];
                 updateStats();
             }
         }
 
-        // Boot
-        window.onload = () => updateStats();
+        // Boot camera
+        window.onload = () => {
+            startCamera();
+            updateStats();
+        };
     </script>
 </body>
 </html>
